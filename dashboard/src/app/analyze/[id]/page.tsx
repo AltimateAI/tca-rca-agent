@@ -26,10 +26,20 @@ export default function AnalyzePage() {
   const [cancelled, setCancelled] = useState(false);
 
   useEffect(() => {
+    let isMounted = true;
+    const abortController = new AbortController();
+    let streamCleanup: (() => void) | null = null;
+
     const loadAnalysis = async () => {
       try {
         // First, try to get cached result
-        const historyResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/rca/history`);
+        const historyResponse = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/rca/history`,
+          { signal: abortController.signal }
+        );
+
+        if (!isMounted) return;
+
         if (historyResponse.ok) {
           const history = await historyResponse.json();
           const cachedAnalysis = history.find((item: any) => item.id === analysisId);
@@ -43,8 +53,12 @@ export default function AnalyzePage() {
           }
         }
 
+        if (!isMounted) return;
+
         // No cached result, connect to stream
-        await api.streamAnalysis(analysisId, (event: RCAStreamEvent) => {
+        const stream = api.streamAnalysis(analysisId, (event: RCAStreamEvent) => {
+          if (!isMounted) return;
+
           if (event.type === 'progress') {
             setProgress((prev) => [...prev, event.data.message]);
           } else if (event.type === 'result') {
@@ -55,13 +69,24 @@ export default function AnalyzePage() {
             setLoading(false);
           }
         });
+
+        streamCleanup = stream.close;
+        await stream.promise;
       } catch (err: any) {
+        if (err.name === 'AbortError') return; // Ignore abort errors
+        if (!isMounted) return;
         setError(err.message);
         setLoading(false);
       }
     };
 
     loadAnalysis();
+
+    return () => {
+      isMounted = false;
+      abortController.abort();
+      if (streamCleanup) streamCleanup();
+    };
   }, [analysisId]);
 
   const checkPRStatus = async () => {
