@@ -1,0 +1,16 @@
+{
+  "name": "tca-mcp-servers",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Custom MCP servers for TCA RCA Agent",
+  "scripts": {
+    "start:posthog": "node posthog_server.js",
+    "start:aws": "node aws_server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "@aws-sdk/client-cloudwatch-logs": "^3.709.0",
+    "@aws-sdk/client-xray": "^3.709.0",
+    "@aws-sdk/client-ecs": "^3.709.0"
+  }
+}

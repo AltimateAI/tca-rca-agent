@@ -1,0 +1,89 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# Environment Variables - NEVER COMMIT THESE!
+.env
+.env.local
+.env.production
+.env.development
+.mcp.json
+
+# BUT allow .env.example (template file)
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Next.js & Node.js
+**/node_modules/
+**/.next/
+**/out/
+dashboard/.env.local
+**/package-lock.json
+**/.pnp
+**/.pnp.js
+
+# Docker
+*.pid
+*.seed
+*.pid.lock
+
+# Development/Temporary Files
+.claude/
+.serena/
+.ralph*
+.call_count
+.circuit_breaker_*
+.exit_signals
+.last_reset
+.response_analysis
+.playwright-mcp/
+*.err
+*_output.json
+progress.json
+status.json
+
+# Example env file (keep this commented as template)
+# .env.example should be committed
