@@ -87,3 +87,4 @@ status.json
 
 # Example env file (keep this commented as template)
 # .env.example should be committed
+examples/
