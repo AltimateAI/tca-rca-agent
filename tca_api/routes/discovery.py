@@ -25,6 +25,7 @@ class ScanRequest(BaseModel):
     """Request to scan Sentry for issues."""
     timeframe: str = "24h"  # 24h, 7d, 30d
     organization: Optional[str] = None
+    project: Optional[str] = None  # Filter by project slug (e.g., altimate-backend)
     min_occurrences: int = 10  # Minimum error count to consider
     auto_analyze: bool = False  # Auto-start analysis for high priority issues
 
@@ -37,6 +38,7 @@ class QueuedIssue(BaseModel):
     user_count: int
     last_seen: str
     title: str
+    project: Optional[str] = None  # Project slug (e.g., altimate-backend)
     status: str  # queued | analyzing | completed | failed
     analysis_id: Optional[str] = None
 
@@ -199,6 +201,25 @@ async def scan_sentry_issues(
             "limit": 100  # Fetch 100 per page
         }
 
+        # Add project filter if specified (need to get project ID from slug)
+        project_id = None
+        if request.project:
+            # Fetch projects to get ID from slug
+            projects_url = f"https://sentry.io/api/0/organizations/{org}/projects/"
+            projects_response = requests.get(projects_url, headers=headers)
+            if projects_response.status_code == 200:
+                projects = projects_response.json()
+                for proj in projects:
+                    if proj.get('slug') == request.project:
+                        project_id = proj.get('id')
+                        break
+
+            if project_id:
+                params["project"] = project_id
+                print(f"🎯 Filtering by project: {request.project} (ID: {project_id})")
+            else:
+                raise HTTPException(status_code=400, detail=f"Project '{request.project}' not found")
+
         # Pagination loop
         max_pages = 10  # Limit to prevent excessive API calls
         page_count = 0
@@ -249,12 +270,17 @@ async def scan_sentry_issues(
             count = issue.get('count', 0)
             user_count = issue.get('userCount', 0)
 
+            # Extract project info from Sentry response
+            project_info = issue.get('project', {})
+            project_slug = project_info.get('slug') if isinstance(project_info, dict) else None
+
             issues.append({
                 'id': issue.get('id'),
                 'count': int(count) if count else 0,
                 'userCount': int(user_count) if user_count else 0,
                 'title': issue.get('title', 'Unknown'),
-                'lastSeen': issue.get('lastSeen', '')
+                'lastSeen': issue.get('lastSeen', ''),
+                'project': project_slug
             })
 
         print(f"📋 Transformed {len(issues)} issues")
@@ -302,6 +328,7 @@ async def scan_sentry_issues(
                     'user_count': issue.get('userCount', 0),
                     'last_seen': issue.get('lastSeen', ''),
                     'title': issue.get('title', 'Unknown'),
+                    'project': issue.get('project'),  # Track which project the issue is from
                     'status': 'queued',
                     'analysis_id': None,
                     'queued_at': datetime.utcnow().isoformat()
@@ -471,6 +498,7 @@ async def _auto_analyze_issue(issue_id: str, org: str, queued_issue: dict):
 @router.get("/queue", response_model=List[QueuedIssue])
 async def get_queue(
     status: Optional[str] = None,
+    project: Optional[str] = None,
     limit: int = 50
 ):
     """
@@ -478,6 +506,7 @@ async def get_queue(
 
     Args:
         status: Filter by status (queued | analyzing | completed | failed)
+        project: Filter by project slug (e.g., altimate-backend)
         limit: Maximum number of items to return
 
     Returns:
@@ -486,12 +515,58 @@ async def get_queue(
     # Filter by status if provided
     filtered = issue_queue
     if status:
-        filtered = [q for q in issue_queue if q['status'] == status]
+        filtered = [q for q in filtered if q['status'] == status]
+
+    # Filter by project if provided
+    if project:
+        filtered = [q for q in filtered if q.get('project') == project]
 
     # Sort by priority (highest first)
     sorted_queue = sorted(filtered, key=lambda x: x['priority'], reverse=True)
 
     return sorted_queue[:limit]
+
+
+@router.get("/projects")
+async def list_projects():
+    """
+    List all available Sentry projects in the organization.
+
+    Returns:
+        List of project slugs available for filtering
+    """
+    import requests
+
+    org = os.getenv("SENTRY_ORG") or os.getenv("TCA_SENTRY_ORG")
+    auth_token = os.getenv("SENTRY_AUTH_TOKEN") or os.getenv("TCA_SENTRY_AUTH_TOKEN")
+
+    if not auth_token:
+        raise HTTPException(status_code=500, detail="SENTRY_AUTH_TOKEN not configured")
+
+    url = f"https://sentry.io/api/0/organizations/{org}/projects/"
+    headers = {"Authorization": f"Bearer {auth_token}"}
+
+    response = requests.get(url, headers=headers)
+
+    if response.status_code != 200:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Sentry API error: {response.status_code}"
+        )
+
+    projects = response.json()
+
+    return {
+        "organization": org,
+        "projects": [
+            {
+                "slug": p.get("slug"),
+                "name": p.get("name"),
+                "platform": p.get("platform")
+            }
+            for p in projects
+        ]
+    }
 
 
 @router.delete("/queue/{issue_id}")
